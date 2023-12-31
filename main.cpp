@@ -2,32 +2,94 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "GL/freeglut.h"
+#include "GL/glew.h"
 #include "GLFW/glfw3.h"
-#include "warship_3d.h"
-#include "ret.h"
-#include "fire1.h"
-#include "fire2.h"
-#include "makefloor.h"
-#include "misile.h"
-#include "wing.h"
-#include "ammo.h"
-#include "cockPit.h"
-#include "tailWing.h"
-#include "missileRightRight.h"
-#include "missileRightLeft.h"
-#include "missileLeftRight.h"
-#include "missileLeftLeft.h"
-#include "enemy.h"
-#include "bullet.h"
-#include "3ret.h"
-#include "field.h"
 #include <vector>
 #include <string>
 #include <map>
 #include <unordered_map>
 #include <omp.h>
 #include <string>
+#include <glm/glm/glm.hpp>
+#include <glm/glm/gtc/matrix_transform.hpp>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <glm/glm/gtc/type_ptr.hpp>
+#include "main.h"
+
+//#include "warship_3d.h"
+//#include "ret.h"
+//#include "fire1.h"
+//#include "fire2.h"
+//#include "makefloor.h"
+//#include "misile.h"
+//#include "wing.h"
+//#include "ammo.h"
+//#include "cockPit.h"
+//#include "tailWing.h"
+//#include "missileRightRight.h"
+//#include "missileRightLeft.h"
+//#include "missileLeftRight.h"
+//#include "missileLeftLeft.h"
+//#include "enemy.h"
+//#include "bullet.h"
+//#include "3ret.h"
+//#include "field.h"
+
 //#pragma comment (lib, "lib\x86\freeglut.lib")
+
+const char* vertexShaderSource = R"(
+    #version 330 core
+    layout (location = 0) in vec3 aPos;
+    uniform mat4 model;
+    void main()
+    {
+        gl_Position = model * vec4(aPos, 1.0);
+    }
+)";
+
+const char* fragmentShaderSource = R"(
+    #version 330 core
+    out vec4 FragColor;
+    void main()
+    {
+        FragColor = vec4(1.0, 0.5, 0.2, 1.0);
+    }
+)";
+
+GLuint shaderProgram;
+
+std::vector<GLfloat> readDataFromFile(const std::string& filename)
+{
+    std::vector<GLfloat> vertexData;
+
+    std::ifstream file(filename);
+    if (!file.is_open())
+    {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return vertexData;
+    }
+
+    std::string line;
+    while (std::getline(file, line))
+    {
+        std::istringstream iss(line);
+        GLfloat x, y, z;
+        if (!(iss >> x >> y >> z))
+        {
+            std::cerr << "Failed to parse line: " << line << std::endl;
+            continue;
+        }
+
+        vertexData.push_back(x);
+        vertexData.push_back(y);
+        vertexData.push_back(z);
+    }
+
+    return vertexData;
+}
+
 //bool
 bool keys[256];
 bool onKeyPress = false;
@@ -111,19 +173,21 @@ void disp()
 {
     /*
     ç°å„ÇÃí«â¡ó\íË
+    ÅEÉ}ÉEÉXÇ≈ã@ëÃÇëÄçÏÇ∑ÇÈ
     ÅEOpenMPÇópÇ¢ÇΩGPUÇ…ÇÊÇÈï¿óÒèàóù(Ç±ÇÍÇÕforï™ÇÃíÜêgÇ™ëÂÇ´Ç∑Ç¨Çƒî≤ÇØèoÇπÇ»Ç≠Ç»ÇÈÇÊÇ§Ç»èÍèäÇ…égópÇ∑ÇÈÇ◊Ç´)
-    ÅEã@èeÇÃí«â¡
     ÅEã@èeÇ∆É~ÉTÉCÉãÇ…ÇªÇÍÇºÇÍçUåÇóÕÇê›íËÇµÅAÇªÇÍÇºÇÍÇêÿÇËë÷Ç¶ÇÈÉLÅ[ÉoÉCÉìÉhÇÃí«â¡
     ÅEÉIÉìÉâÉCÉìëŒêÌã@î\ÇÃí«â¡
     ÅENPCÉIÉuÉWÉFÉNÉgÇÃí«â¡
     ÅEí«â¡É~ÉTÉCÉãÉIÉuÉWÉFÉNÉgÇ‚í«â¡ÉpÅ[ÉcÉIÉuÉWÉFÉNÉgÇÃí«â¡
     ÅEìGÉIÉuÉWÉFÉNÉgÇì|ÇµÇΩç€Ç…Ç®ã‡ÇÉhÉçÉbÉvÅAÇªÇÃÇ®ã‡ÇégÇ¡Çƒã@ëÃÇÃÉAÉbÉvÉOÉåÅ[ÉhÇ≈Ç´ÇÈÇÊÇ§Ç…ÇµÇΩÇ¢
     ÅEÉeÉNÉXÉ`ÉÉÉ}ÉbÉsÉìÉOÇópÇ¢Çƒê¬ãÛÇÃï`é 
+    ÅEÉVÉFÅ[É_Å[ÉxÅ[ÉXÇ≈çsÇ¶ÇÈÇÊÇ§Ç…Ç∑ÇÈ
     */
 
         GLfloat light0pos[] = { 10.0 - _movingXPoint, 10.0 - _movingYPoint, 7.0, 0.5 };
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glUseProgram(shaderProgram);
         if (dead == true)
         {
             sprintf_s(t_char5, "You are dead!");
@@ -192,8 +256,12 @@ void disp()
         //glVertex3f(100, -20, 10);
         //glVertex3f(-100, -20, -200);
         //glEnd();
-        glVertexPointer(3, GL_FLOAT, 0, Fieldvertex);
-        makeField(1, 1, 1);
+        //glVertexPointer(3, GL_FLOAT, 0, Fieldvertex);
+        //makeField(1, 1, 1);
+
+        
+
+
         //ìVà‰
         //glColor3f(1, 1, 1);
         //glBegin(GL_QUADS);
@@ -252,6 +320,11 @@ void disp()
         glEnableClientState(GL_VERTEX_ARRAY);
 
 
+        glm::mat4 modelRR = glm::mat4(1.0f);
+        glm::mat4 modelRL = glm::mat4(1.0f);
+        glm::mat4 modelLL = glm::mat4(1.0f);
+        glm::mat4 modelLR = glm::mat4(1.0f);
+
         if (checkRightRightFire == true)
         {
             if (rightrightPos < -150.0)
@@ -260,12 +333,16 @@ void disp()
                 rightrightPos = 0;
                 RRMissileCont = 0.0;
             }
-            glPushMatrix();
 
-            glTranslatef(movingRRXPoint + RRMissileCont, movingRRYPoint, rightrightPos);
-            glVertexPointer(3, GL_FLOAT, 0, RightRightMissilevertex);
-            makeRightRightMissile(0.3, 0.3, 0.3);
-            glPopMatrix();
+            modelRR = glm::translate(glm::mat4(1.0f), glm::vec3(movingRRXPoint + RRMissileCont, movingRRYPoint, rightrightPos));
+            GLuint modelRRLoc = glGetUniformLocation(shaderProgram, "model");
+            glUniformMatrix4fv(modelRRLoc, 1, GL_FALSE, glm::value_ptr(modelRR));
+            VertexObject rr("config/missileRightRightVData.txt");
+            auto vao = rr.GetVAO();
+            auto vbo = rr.GetVBO();
+            glBindVertexArray(vao);
+
+            glDrawArrays(GL_QUADS, 0, 4);
             rightrightPos -= 0.1;
             RRMissileCont -= 0.5 / 300.0;
         }
@@ -415,25 +492,22 @@ void disp()
 #pragma omp parallel for
             for (int i = 0; i < bulletNUM; i++)
             {
-                Bullet(i);
+                if (movingBulletZ[i] > -100)
+                {
+                    glPushMatrix();
+                    glTranslatef(movingBulletX[i], movingBulletY[i], movingBulletZ[i]);
+                    glVertexPointer(3, GL_FLOAT, 0, Bulletvertex);
+                    makeBullet(1, 1, 1);
+                    glPopMatrix();
+                    movingBulletZ[num] -= 0.2;
+                }
+
             }
         }
         glutSwapBuffers();
         glFlush();
 }
 
-void Bullet(int num)
-{
-    if (movingBulletZ[num] > -100)
-    {
-        glPushMatrix();
-        glTranslatef(movingBulletX[num], movingBulletY[num], movingBulletZ[num]);
-        glVertexPointer(3, GL_FLOAT, 0, Bulletvertex);
-        makeBullet(1, 1, 1);
-        glPopMatrix();
-        movingBulletZ[num] -= 0.2;
-    }
-}
 
 void reshape(int width, int height) 
 {
@@ -457,225 +531,227 @@ void InitialProc(const std::unordered_map<std::string,std::string>& maps)
     memset(movingBulletY, 0.0, sizeof(movingBulletY));
     memset(movingBulletZ, 0.0, sizeof(movingBulletZ));
 
-    FILE* fpVData, * fpFData, * fpretVData, * fpretFData, * fpFire1VData, * fpFire1FData, * fpFire2VData, * fpFire2FData, * fpWingVData, * fpWingFData, * fpTailWingVData, * fpTailWingFData, * fpCockPitVData, * fpCockPitFData, * fpRightRightMissileVData, * fpRightRightMissileFData, * fpRightLeftMissileVData, * fpRightLeftMissileFData, * fpLeftRightMissileVData, * fpLeftRightMissileFData, * fpLeftLeftMissileVData, * fpLeftLeftMissileFData;
-    FILE* fpEnemyVData, * fpEnemyFData, * fpBulletVData, * fpBulletFData, * fp3retVData, * fp3retFData, * fpFieldVData, * fpFieldFData;
-    
-    fopen_s(&fpVData,maps.at("mainShipV").c_str(), "r");//vData.txtÇargs[0]Ç…ì¸ÇÍÇƒÇ¢ÇÈ
-    fopen_s(&fpFData, maps.at("mainShipF").c_str(), "r");
-    fopen_s(&fpretVData, maps.at("retV").c_str(), "r");
-    fopen_s(&fpretFData, maps.at("retF").c_str(), "r");
-    fopen_s(&fpFire1VData, maps.at("fire1V").c_str(), "r");
-    fopen_s(&fpFire1FData, maps.at("fire1F").c_str(), "r");
-    fopen_s(&fpFire2VData, maps.at("fire2V").c_str(), "r");
-    fopen_s(&fpFire2FData, maps.at("fire2F").c_str(), "r");
-    fopen_s(&fpWingVData, maps.at("wingV").c_str(), "r");
-    fopen_s(&fpWingFData, maps.at("wingF").c_str(), "r");
-    fopen_s(&fpTailWingVData, maps.at("tailWingV").c_str(), "r");
-    fopen_s(&fpTailWingFData, maps.at("tailWingF").c_str(), "r");
-    fopen_s(&fpCockPitVData, maps.at("cockPitV").c_str(), "r");
-    fopen_s(&fpCockPitFData, maps.at("cockPitF").c_str(), "r");
-    fopen_s(&fpRightRightMissileVData, maps.at("RRMissileV").c_str(), "r");
-    fopen_s(&fpRightRightMissileFData, maps.at("RRMissileF").c_str(), "r");
-    fopen_s(&fpRightLeftMissileVData, maps.at("RLMissileV").c_str(), "r");
-    fopen_s(&fpRightLeftMissileFData, maps.at("RLMissileF").c_str(), "r");
-    fopen_s(&fpLeftRightMissileVData, maps.at("LRMissileV").c_str(), "r");
-    fopen_s(&fpLeftRightMissileFData, maps.at("LRMissileF").c_str(), "r");
-    fopen_s(&fpLeftLeftMissileVData, maps.at("LLMissileV").c_str(), "r");
-    fopen_s(&fpLeftLeftMissileFData, maps.at("LLMissileF").c_str(), "r");
-    fopen_s(&fpEnemyVData, maps.at("enemyV").c_str(), "r");
-    fopen_s(&fpEnemyFData, maps.at("enemyF").c_str(), "r");
-    fopen_s(&fpBulletVData, maps.at("bulletV").c_str(), "r");
-    fopen_s(&fpBulletFData, maps.at("bulletF").c_str(), "r");
-    fopen_s(&fp3retVData, maps.at("3retV").c_str(), "r");
-    fopen_s(&fp3retFData, maps.at("3retF").c_str(), "r");
-    fopen_s(&fpFieldVData, maps.at("fieldV").c_str(), "r");
-    fopen_s(&fpFieldFData, maps.at("fieldF").c_str(), "r");
-
-    
-
-    if ((fpVData == NULL) || (fpFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpVData, "%f, %f, %f", &vertex[vertexDataSize * 3], &vertex[vertexDataSize * 3 + 1], &vertex[vertexDataSize * 3 + 2]) != EOF)
-            vertexDataSize++;
-
-        while (fscanf_s(fpFData, "%d, %d, %d", &lines[lineDataSize * 3], &lines[lineDataSize * 3 + 1], &lines[lineDataSize * 3 + 2]) != EOF)
-            lineDataSize++;
-    }
-    if ((fpretVData == NULL) || (fpretFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpretVData, "%f, %f, %f", &Rvertex[RvertexDataSize * 3], &Rvertex[RvertexDataSize * 3 + 1], &Rvertex[RvertexDataSize * 3 + 2]) != EOF)
-            RvertexDataSize++;
-
-        while (fscanf_s(fpretFData, "%d, %d, %d", &Rlines[RlineDataSize * 3], &Rlines[RlineDataSize * 3 + 1], &Rlines[RlineDataSize * 3 + 2]) != EOF)
-            RlineDataSize++;
-    }
-    if ((fp3retVData == NULL) || (fp3retFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fp3retVData, "%f, %f, %f", &ThirdRvertex[ThirdRvertexDataSize * 3], &ThirdRvertex[ThirdRvertexDataSize * 3 + 1], &ThirdRvertex[ThirdRvertexDataSize * 3 + 2]) != EOF)
-            ThirdRvertexDataSize++;
-
-        while (fscanf_s(fp3retFData, "%d, %d, %d", &ThirdRlines[ThirdRlineDataSize * 3], &ThirdRlines[ThirdRlineDataSize * 3 + 1], &ThirdRlines[ThirdRlineDataSize * 3 + 2]) != EOF)
-            ThirdRlineDataSize++;
-    }
-
-    if ((fpFire1VData == NULL) || (fpFire1FData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpFire1VData, "%f, %f, %f", &Fire1vertex[Fire1vertexDataSize * 3], &Fire1vertex[Fire1vertexDataSize * 3 + 1], &Fire1vertex[Fire1vertexDataSize * 3 + 2]) != EOF)
-            Fire1vertexDataSize++;
-
-        while (fscanf_s(fpFire1FData, "%d, %d, %d", &Fire1lines[Fire1lineDataSize * 3], &Fire1lines[Fire1lineDataSize * 3 + 1], &Fire1lines[Fire1lineDataSize * 3 + 2]) != EOF)
-            Fire1lineDataSize++;
-    }
-    if ((fpFire2VData == NULL) || (fpFire2FData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpFire2VData, "%f, %f, %f", &Fire2vertex[Fire2vertexDataSize * 3], &Fire2vertex[Fire2vertexDataSize * 3 + 1], &Fire2vertex[Fire2vertexDataSize * 3 + 2]) != EOF)
-            Fire2vertexDataSize++;
-
-        while (fscanf_s(fpFire2FData, "%d, %d, %d", &Fire2lines[Fire2lineDataSize * 3], &Fire2lines[Fire2lineDataSize * 3 + 1], &Fire2lines[Fire2lineDataSize * 3 + 2]) != EOF)
-            Fire2lineDataSize++;
-    }
-    if ((fpWingVData == NULL) || (fpWingFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpWingVData, "%f, %f, %f", &Wingvertex[WingvertexDataSize * 3], &Wingvertex[WingvertexDataSize * 3 + 1], &Wingvertex[WingvertexDataSize * 3 + 2]) != EOF)
-            WingvertexDataSize++;
-
-        while (fscanf_s(fpWingFData, "%d, %d, %d", &Winglines[WinglineDataSize * 3], &Winglines[WinglineDataSize * 3 + 1], &Winglines[WinglineDataSize * 3 + 2]) != EOF)
-            WinglineDataSize++;
-    }
 
 
-    if ((fpTailWingVData == NULL) || (fpTailWingFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpTailWingVData, "%f, %f, %f", &tailWingvertex[tailWingvertexDataSize * 3], &tailWingvertex[tailWingvertexDataSize * 3 + 1], &tailWingvertex[tailWingvertexDataSize * 3 + 2]) != EOF)
-            tailWingvertexDataSize++;
+    //FILE* fpVData, * fpFData, * fpretVData, * fpretFData, * fpFire1VData, * fpFire1FData, * fpFire2VData, * fpFire2FData, * fpWingVData, * fpWingFData, * fpTailWingVData, * fpTailWingFData, * fpCockPitVData, * fpCockPitFData, * fpRightRightMissileVData, * fpRightRightMissileFData, * fpRightLeftMissileVData, * fpRightLeftMissileFData, * fpLeftRightMissileVData, * fpLeftRightMissileFData, * fpLeftLeftMissileVData, * fpLeftLeftMissileFData;
+    //FILE* fpEnemyVData, * fpEnemyFData, * fpBulletVData, * fpBulletFData, * fp3retVData, * fp3retFData, * fpFieldVData, * fpFieldFData;
+    //
+    //fopen_s(&fpVData,maps.at("mainShipV").c_str(), "r");//vData.txtÇargs[0]Ç…ì¸ÇÍÇƒÇ¢ÇÈ
+    //fopen_s(&fpFData, maps.at("mainShipF").c_str(), "r");
+    //fopen_s(&fpretVData, maps.at("retV").c_str(), "r");
+    //fopen_s(&fpretFData, maps.at("retF").c_str(), "r");
+    //fopen_s(&fpFire1VData, maps.at("fire1V").c_str(), "r");
+    //fopen_s(&fpFire1FData, maps.at("fire1F").c_str(), "r");
+    //fopen_s(&fpFire2VData, maps.at("fire2V").c_str(), "r");
+    //fopen_s(&fpFire2FData, maps.at("fire2F").c_str(), "r");
+    //fopen_s(&fpWingVData, maps.at("wingV").c_str(), "r");
+    //fopen_s(&fpWingFData, maps.at("wingF").c_str(), "r");
+    //fopen_s(&fpTailWingVData, maps.at("tailWingV").c_str(), "r");
+    //fopen_s(&fpTailWingFData, maps.at("tailWingF").c_str(), "r");
+    //fopen_s(&fpCockPitVData, maps.at("cockPitV").c_str(), "r");
+    //fopen_s(&fpCockPitFData, maps.at("cockPitF").c_str(), "r");
+    //fopen_s(&fpRightRightMissileVData, maps.at("RRMissileV").c_str(), "r");
+    //fopen_s(&fpRightRightMissileFData, maps.at("RRMissileF").c_str(), "r");
+    //fopen_s(&fpRightLeftMissileVData, maps.at("RLMissileV").c_str(), "r");
+    //fopen_s(&fpRightLeftMissileFData, maps.at("RLMissileF").c_str(), "r");
+    //fopen_s(&fpLeftRightMissileVData, maps.at("LRMissileV").c_str(), "r");
+    //fopen_s(&fpLeftRightMissileFData, maps.at("LRMissileF").c_str(), "r");
+    //fopen_s(&fpLeftLeftMissileVData, maps.at("LLMissileV").c_str(), "r");
+    //fopen_s(&fpLeftLeftMissileFData, maps.at("LLMissileF").c_str(), "r");
+    //fopen_s(&fpEnemyVData, maps.at("enemyV").c_str(), "r");
+    //fopen_s(&fpEnemyFData, maps.at("enemyF").c_str(), "r");
+    //fopen_s(&fpBulletVData, maps.at("bulletV").c_str(), "r");
+    //fopen_s(&fpBulletFData, maps.at("bulletF").c_str(), "r");
+    //fopen_s(&fp3retVData, maps.at("3retV").c_str(), "r");
+    //fopen_s(&fp3retFData, maps.at("3retF").c_str(), "r");
+    //fopen_s(&fpFieldVData, maps.at("fieldV").c_str(), "r");
+    //fopen_s(&fpFieldFData, maps.at("fieldF").c_str(), "r");
 
-        while (fscanf_s(fpTailWingFData, "%d, %d, %d", &tailWinglines[tailWinglineDataSize * 3], &tailWinglines[tailWinglineDataSize * 3 + 1], &tailWinglines[tailWinglineDataSize * 3 + 2]) != EOF)
-            tailWinglineDataSize++;
-    }
-    if ((fpCockPitVData == NULL) || (fpCockPitFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpCockPitVData, "%f, %f, %f", &cockPitvertex[cockPitvertexDataSize * 3], &cockPitvertex[cockPitvertexDataSize * 3 + 1], &cockPitvertex[cockPitvertexDataSize * 3 + 2]) != EOF)
-            cockPitvertexDataSize++;
+    //
 
-        while (fscanf_s(fpCockPitFData, "%d, %d, %d", &cockPitlines[cockPitlineDataSize * 3], &cockPitlines[cockPitlineDataSize * 3 + 1], &cockPitlines[cockPitlineDataSize * 3 + 2]) != EOF)
-            cockPitlineDataSize++;
-    }
-    if ((fpRightRightMissileVData == NULL) || (fpRightRightMissileFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpRightRightMissileVData, "%f, %f, %f", &RightRightMissilevertex[RightRightMissilevertexDataSize * 3], &RightRightMissilevertex[RightRightMissilevertexDataSize * 3 + 1], &RightRightMissilevertex[RightRightMissilevertexDataSize * 3 + 2]) != EOF)
-            RightRightMissilevertexDataSize++;
+    //if ((fpVData == NULL) || (fpFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpVData, "%f, %f, %f", &vertex[vertexDataSize * 3], &vertex[vertexDataSize * 3 + 1], &vertex[vertexDataSize * 3 + 2]) != EOF)
+    //        vertexDataSize++;
 
-        while (fscanf_s(fpRightRightMissileFData, "%d, %d, %d", &RightRightMissilelines[RightRightMissilelineDataSize * 3], &RightRightMissilelines[RightRightMissilelineDataSize * 3 + 1], &RightRightMissilelines[RightRightMissilelineDataSize * 3 + 2]) != EOF)
-            RightRightMissilelineDataSize++;
-    }
-    if ((fpRightLeftMissileVData == NULL) || (fpRightLeftMissileFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpRightLeftMissileVData, "%f, %f, %f", &RightLeftMissilevertex[RightLeftMissilevertexDataSize * 3], &RightLeftMissilevertex[RightLeftMissilevertexDataSize * 3 + 1], &RightLeftMissilevertex[RightLeftMissilevertexDataSize * 3 + 2]) != EOF)
-            RightLeftMissilevertexDataSize++;
+    //    while (fscanf_s(fpFData, "%d, %d, %d", &lines[lineDataSize * 3], &lines[lineDataSize * 3 + 1], &lines[lineDataSize * 3 + 2]) != EOF)
+    //        lineDataSize++;
+    //}
+    //if ((fpretVData == NULL) || (fpretFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpretVData, "%f, %f, %f", &Rvertex[RvertexDataSize * 3], &Rvertex[RvertexDataSize * 3 + 1], &Rvertex[RvertexDataSize * 3 + 2]) != EOF)
+    //        RvertexDataSize++;
 
-        while (fscanf_s(fpRightLeftMissileFData, "%d, %d, %d", &RightLeftMissilelines[RightLeftMissilelineDataSize * 3], &RightLeftMissilelines[RightLeftMissilelineDataSize * 3 + 1], &RightLeftMissilelines[RightLeftMissilelineDataSize * 3 + 2]) != EOF)
-            RightLeftMissilelineDataSize++;
-    }
-    if ((fpLeftRightMissileVData == NULL) || (fpLeftRightMissileFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpLeftRightMissileVData, "%f, %f, %f", &LeftRightMissilevertex[LeftRightMissilevertexDataSize * 3], &LeftRightMissilevertex[LeftRightMissilevertexDataSize * 3 + 1], &LeftRightMissilevertex[LeftRightMissilevertexDataSize * 3 + 2]) != EOF)
-            LeftRightMissilevertexDataSize++;
+    //    while (fscanf_s(fpretFData, "%d, %d, %d", &Rlines[RlineDataSize * 3], &Rlines[RlineDataSize * 3 + 1], &Rlines[RlineDataSize * 3 + 2]) != EOF)
+    //        RlineDataSize++;
+    //}
+    //if ((fp3retVData == NULL) || (fp3retFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fp3retVData, "%f, %f, %f", &ThirdRvertex[ThirdRvertexDataSize * 3], &ThirdRvertex[ThirdRvertexDataSize * 3 + 1], &ThirdRvertex[ThirdRvertexDataSize * 3 + 2]) != EOF)
+    //        ThirdRvertexDataSize++;
 
-        while (fscanf_s(fpLeftRightMissileFData, "%d, %d, %d", &LeftRightMissilelines[LeftRightMissilelineDataSize * 3], &LeftRightMissilelines[LeftRightMissilelineDataSize * 3 + 1], &LeftRightMissilelines[LeftRightMissilelineDataSize * 3 + 2]) != EOF)
-            LeftRightMissilelineDataSize++;
-    }
-    if ((fpLeftLeftMissileVData == NULL) || (fpLeftLeftMissileFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpLeftLeftMissileVData, "%f, %f, %f", &LeftLeftMissilevertex[LeftLeftMissilevertexDataSize * 3], &LeftLeftMissilevertex[LeftLeftMissilevertexDataSize * 3 + 1], &LeftLeftMissilevertex[LeftLeftMissilevertexDataSize * 3 + 2]) != EOF)
-            LeftLeftMissilevertexDataSize++;
+    //    while (fscanf_s(fp3retFData, "%d, %d, %d", &ThirdRlines[ThirdRlineDataSize * 3], &ThirdRlines[ThirdRlineDataSize * 3 + 1], &ThirdRlines[ThirdRlineDataSize * 3 + 2]) != EOF)
+    //        ThirdRlineDataSize++;
+    //}
 
-        while (fscanf_s(fpLeftLeftMissileFData, "%d, %d, %d", &LeftLeftMissilelines[LeftLeftMissilelineDataSize * 3], &LeftLeftMissilelines[LeftLeftMissilelineDataSize * 3 + 1], &LeftLeftMissilelines[LeftLeftMissilelineDataSize * 3 + 2]) != EOF)
-            LeftLeftMissilelineDataSize++;
-    }
-    if ((fpEnemyVData == NULL) || (fpEnemyFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpEnemyVData, "%f, %f, %f", &Enemyvertex[EnemyvertexDataSize * 3], &Enemyvertex[EnemyvertexDataSize * 3 + 1], &Enemyvertex[EnemyvertexDataSize * 3 + 2]) != EOF)
-            EnemyvertexDataSize++;
+    //if ((fpFire1VData == NULL) || (fpFire1FData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpFire1VData, "%f, %f, %f", &Fire1vertex[Fire1vertexDataSize * 3], &Fire1vertex[Fire1vertexDataSize * 3 + 1], &Fire1vertex[Fire1vertexDataSize * 3 + 2]) != EOF)
+    //        Fire1vertexDataSize++;
 
-        while (fscanf_s(fpEnemyFData, "%d, %d, %d", &Enemylines[EnemylineDataSize * 3], &Enemylines[EnemylineDataSize * 3 + 1], &Enemylines[EnemylineDataSize * 3 + 2]) != EOF)
-            EnemylineDataSize++;
-    }
-    if ((fpBulletVData == NULL) || (fpBulletFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpBulletVData, "%f, %f, %f", &Bulletvertex[BulletvertexDataSize * 3], &Bulletvertex[BulletvertexDataSize * 3 + 1], &Bulletvertex[BulletvertexDataSize * 3 + 2]) != EOF)
-            BulletvertexDataSize++;
+    //    while (fscanf_s(fpFire1FData, "%d, %d, %d", &Fire1lines[Fire1lineDataSize * 3], &Fire1lines[Fire1lineDataSize * 3 + 1], &Fire1lines[Fire1lineDataSize * 3 + 2]) != EOF)
+    //        Fire1lineDataSize++;
+    //}
+    //if ((fpFire2VData == NULL) || (fpFire2FData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpFire2VData, "%f, %f, %f", &Fire2vertex[Fire2vertexDataSize * 3], &Fire2vertex[Fire2vertexDataSize * 3 + 1], &Fire2vertex[Fire2vertexDataSize * 3 + 2]) != EOF)
+    //        Fire2vertexDataSize++;
 
-        while (fscanf_s(fpBulletFData, "%d, %d, %d", &Bulletlines[BulletlineDataSize * 3], &Bulletlines[BulletlineDataSize * 3 + 1], &Bulletlines[BulletlineDataSize * 3 + 2]) != EOF)
-            BulletlineDataSize++;
-    }
-    if ((fpFieldVData == NULL) || (fpFieldFData == NULL)) {
-        printf("file error!!\n");
-        return;
-    }
-    else
-    {
-        while (fscanf_s(fpFieldVData, "%f, %f, %f", &Fieldvertex[FieldvertexDataSize * 3], &Fieldvertex[FieldvertexDataSize * 3 + 1], &Fieldvertex[FieldvertexDataSize * 3 + 2]) != EOF)
-            FieldvertexDataSize++;
+    //    while (fscanf_s(fpFire2FData, "%d, %d, %d", &Fire2lines[Fire2lineDataSize * 3], &Fire2lines[Fire2lineDataSize * 3 + 1], &Fire2lines[Fire2lineDataSize * 3 + 2]) != EOF)
+    //        Fire2lineDataSize++;
+    //}
+    //if ((fpWingVData == NULL) || (fpWingFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpWingVData, "%f, %f, %f", &Wingvertex[WingvertexDataSize * 3], &Wingvertex[WingvertexDataSize * 3 + 1], &Wingvertex[WingvertexDataSize * 3 + 2]) != EOF)
+    //        WingvertexDataSize++;
 
-        while (fscanf_s(fpFieldFData, "%d, %d, %d", &Fieldlines[FieldlineDataSize * 3], &Fieldlines[FieldlineDataSize * 3 + 1], &Fieldlines[FieldlineDataSize * 3 + 2]) != EOF)
-            FieldlineDataSize++;
-    }
+    //    while (fscanf_s(fpWingFData, "%d, %d, %d", &Winglines[WinglineDataSize * 3], &Winglines[WinglineDataSize * 3 + 1], &Winglines[WinglineDataSize * 3 + 2]) != EOF)
+    //        WinglineDataSize++;
+    //}
+
+
+    //if ((fpTailWingVData == NULL) || (fpTailWingFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpTailWingVData, "%f, %f, %f", &tailWingvertex[tailWingvertexDataSize * 3], &tailWingvertex[tailWingvertexDataSize * 3 + 1], &tailWingvertex[tailWingvertexDataSize * 3 + 2]) != EOF)
+    //        tailWingvertexDataSize++;
+
+    //    while (fscanf_s(fpTailWingFData, "%d, %d, %d", &tailWinglines[tailWinglineDataSize * 3], &tailWinglines[tailWinglineDataSize * 3 + 1], &tailWinglines[tailWinglineDataSize * 3 + 2]) != EOF)
+    //        tailWinglineDataSize++;
+    //}
+    //if ((fpCockPitVData == NULL) || (fpCockPitFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpCockPitVData, "%f, %f, %f", &cockPitvertex[cockPitvertexDataSize * 3], &cockPitvertex[cockPitvertexDataSize * 3 + 1], &cockPitvertex[cockPitvertexDataSize * 3 + 2]) != EOF)
+    //        cockPitvertexDataSize++;
+
+    //    while (fscanf_s(fpCockPitFData, "%d, %d, %d", &cockPitlines[cockPitlineDataSize * 3], &cockPitlines[cockPitlineDataSize * 3 + 1], &cockPitlines[cockPitlineDataSize * 3 + 2]) != EOF)
+    //        cockPitlineDataSize++;
+    //}
+    //if ((fpRightRightMissileVData == NULL) || (fpRightRightMissileFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpRightRightMissileVData, "%f, %f, %f", &RightRightMissilevertex[RightRightMissilevertexDataSize * 3], &RightRightMissilevertex[RightRightMissilevertexDataSize * 3 + 1], &RightRightMissilevertex[RightRightMissilevertexDataSize * 3 + 2]) != EOF)
+    //        RightRightMissilevertexDataSize++;
+
+    //    while (fscanf_s(fpRightRightMissileFData, "%d, %d, %d", &RightRightMissilelines[RightRightMissilelineDataSize * 3], &RightRightMissilelines[RightRightMissilelineDataSize * 3 + 1], &RightRightMissilelines[RightRightMissilelineDataSize * 3 + 2]) != EOF)
+    //        RightRightMissilelineDataSize++;
+    //}
+    //if ((fpRightLeftMissileVData == NULL) || (fpRightLeftMissileFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpRightLeftMissileVData, "%f, %f, %f", &RightLeftMissilevertex[RightLeftMissilevertexDataSize * 3], &RightLeftMissilevertex[RightLeftMissilevertexDataSize * 3 + 1], &RightLeftMissilevertex[RightLeftMissilevertexDataSize * 3 + 2]) != EOF)
+    //        RightLeftMissilevertexDataSize++;
+
+    //    while (fscanf_s(fpRightLeftMissileFData, "%d, %d, %d", &RightLeftMissilelines[RightLeftMissilelineDataSize * 3], &RightLeftMissilelines[RightLeftMissilelineDataSize * 3 + 1], &RightLeftMissilelines[RightLeftMissilelineDataSize * 3 + 2]) != EOF)
+    //        RightLeftMissilelineDataSize++;
+    //}
+    //if ((fpLeftRightMissileVData == NULL) || (fpLeftRightMissileFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpLeftRightMissileVData, "%f, %f, %f", &LeftRightMissilevertex[LeftRightMissilevertexDataSize * 3], &LeftRightMissilevertex[LeftRightMissilevertexDataSize * 3 + 1], &LeftRightMissilevertex[LeftRightMissilevertexDataSize * 3 + 2]) != EOF)
+    //        LeftRightMissilevertexDataSize++;
+
+    //    while (fscanf_s(fpLeftRightMissileFData, "%d, %d, %d", &LeftRightMissilelines[LeftRightMissilelineDataSize * 3], &LeftRightMissilelines[LeftRightMissilelineDataSize * 3 + 1], &LeftRightMissilelines[LeftRightMissilelineDataSize * 3 + 2]) != EOF)
+    //        LeftRightMissilelineDataSize++;
+    //}
+    //if ((fpLeftLeftMissileVData == NULL) || (fpLeftLeftMissileFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpLeftLeftMissileVData, "%f, %f, %f", &LeftLeftMissilevertex[LeftLeftMissilevertexDataSize * 3], &LeftLeftMissilevertex[LeftLeftMissilevertexDataSize * 3 + 1], &LeftLeftMissilevertex[LeftLeftMissilevertexDataSize * 3 + 2]) != EOF)
+    //        LeftLeftMissilevertexDataSize++;
+
+    //    while (fscanf_s(fpLeftLeftMissileFData, "%d, %d, %d", &LeftLeftMissilelines[LeftLeftMissilelineDataSize * 3], &LeftLeftMissilelines[LeftLeftMissilelineDataSize * 3 + 1], &LeftLeftMissilelines[LeftLeftMissilelineDataSize * 3 + 2]) != EOF)
+    //        LeftLeftMissilelineDataSize++;
+    //}
+    //if ((fpEnemyVData == NULL) || (fpEnemyFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpEnemyVData, "%f, %f, %f", &Enemyvertex[EnemyvertexDataSize * 3], &Enemyvertex[EnemyvertexDataSize * 3 + 1], &Enemyvertex[EnemyvertexDataSize * 3 + 2]) != EOF)
+    //        EnemyvertexDataSize++;
+
+    //    while (fscanf_s(fpEnemyFData, "%d, %d, %d", &Enemylines[EnemylineDataSize * 3], &Enemylines[EnemylineDataSize * 3 + 1], &Enemylines[EnemylineDataSize * 3 + 2]) != EOF)
+    //        EnemylineDataSize++;
+    //}
+    //if ((fpBulletVData == NULL) || (fpBulletFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpBulletVData, "%f, %f, %f", &Bulletvertex[BulletvertexDataSize * 3], &Bulletvertex[BulletvertexDataSize * 3 + 1], &Bulletvertex[BulletvertexDataSize * 3 + 2]) != EOF)
+    //        BulletvertexDataSize++;
+
+    //    while (fscanf_s(fpBulletFData, "%d, %d, %d", &Bulletlines[BulletlineDataSize * 3], &Bulletlines[BulletlineDataSize * 3 + 1], &Bulletlines[BulletlineDataSize * 3 + 2]) != EOF)
+    //        BulletlineDataSize++;
+    //}
+    //if ((fpFieldVData == NULL) || (fpFieldFData == NULL)) {
+    //    printf("file error!!\n");
+    //    return;
+    //}
+    //else
+    //{
+    //    while (fscanf_s(fpFieldVData, "%f, %f, %f", &Fieldvertex[FieldvertexDataSize * 3], &Fieldvertex[FieldvertexDataSize * 3 + 1], &Fieldvertex[FieldvertexDataSize * 3 + 2]) != EOF)
+    //        FieldvertexDataSize++;
+
+    //    while (fscanf_s(fpFieldFData, "%d, %d, %d", &Fieldlines[FieldlineDataSize * 3], &Fieldlines[FieldlineDataSize * 3 + 1], &Fieldlines[FieldlineDataSize * 3 + 2]) != EOF)
+    //        FieldlineDataSize++;
+    //}
 
 }
 void keyUp(unsigned char key, int x, int y)
@@ -1080,9 +1156,10 @@ void mouse(int button, int state, int x, int y)//É}ÉEÉXÇÉNÉäÉbÉNÇ∑ÇÈèuä‘ÇµÇ©ì«Ç
 }
 void passiveMotion(int x, int y)
 {
+    //wÉLÅ[ÇâüÇ∑Ç∆_movingZPointÇ™Ç«ÇÒÇ«ÇÒëùâ¡Ç∑ÇÈ
     if (pauseBool == false && dead == false && timeOver == false)
     {
-        _movingXPoint -= (x - 900) / 50.0;
+        _movingXPoint -= (x - 900) / 50.0;//ÉèÅ[ÉãÉhç¿ïW
         _movingYPoint += (y - 500) / 50.0;
         glutWarpPointer(900, 500);
         glutMouseFunc(mouse);
@@ -1156,7 +1233,20 @@ int main(int argc, char** argv)
     
     glutInit(&argc, argv);
     glutInitWindowSize(1980, 1080);
-    glutCreateWindow("Ace combat");
+    GLFWwindow* window = glfwCreateWindow(1980, 1080, "Ace combat", nullptr, nullptr);
+    if (!window)
+    {
+        glfwTerminate();
+        return -1;
+    }
+    glfwMakeContextCurrent(window);
+
+    // GLEWÇÃèâä˙âª
+    if (glewInit() != GLEW_OK)
+    {
+        std::cout << "Failed to initialize GLEW" << std::endl;
+        return -1;
+    }
     glutWarpPointer(900, 500);
 
     //glutSetCursor(GLUT_CURSOR_NONE);
@@ -1166,37 +1256,72 @@ int main(int argc, char** argv)
     //    args.push_back(argv[i]);
     //}
 
-    std::unordered_map<std::string, std::string> map;
-    map.insert(std::make_pair("mainShipV", "config/vData.txt"));
-    map.insert(std::make_pair("mainShipF", "config/fData.txt"));
-    map.insert(std::make_pair("cockPitV", "config/cockPitVData.txt"));
-    map.insert(std::make_pair("cockPitF", "config/cockPitFData.txt"));
-    map.insert(std::make_pair("enemyV", "config/enemyVData.txt"));
-    map.insert(std::make_pair("enemyF", "config/enemyFData.txt"));
-    map.insert(std::make_pair("fire1V", "config/fire1VData.txt"));
-    map.insert(std::make_pair("fire1F", "config/fire1FData.txt"));
-    map.insert(std::make_pair("fire2V", "config/fire2VData.txt"));
-    map.insert(std::make_pair("fire2F", "config/fire2FData.txt"));
-    map.insert(std::make_pair("RRMissileV", "config/missileRightRightVData.txt"));
-    map.insert(std::make_pair("RRMissileF", "config/missileRightRightFData.txt"));
-    map.insert(std::make_pair("RLMissileV", "config/missileRightLeftVData.txt"));
-    map.insert(std::make_pair("RLMissileF", "config/missileRightLeftFData.txt"));
-    map.insert(std::make_pair("LLMissileV", "config/missileLeftLeftVData.txt"));
-    map.insert(std::make_pair("LLMissileF", "config/missileLeftLeftFData.txt"));
-    map.insert(std::make_pair("LRMissileV", "config/missileLeftRightVData.txt"));
-    map.insert(std::make_pair("LRMissileF", "config/missileLeftRightFData.txt"));
-    map.insert(std::make_pair("retV", "config/retVData.txt"));
-    map.insert(std::make_pair("retF", "config/retFData.txt"));
-    map.insert(std::make_pair("tailWingV", "config/tailWingVData.txt"));
-    map.insert(std::make_pair("tailWingF", "config/tailWingFData.txt"));
-    map.insert(std::make_pair("wingV", "config/wingVData.txt"));
-    map.insert(std::make_pair("wingF", "config/wingFData.txt"));
-    map.insert(std::make_pair("bulletV", "config/bulletVData.txt"));
-    map.insert(std::make_pair("bulletF", "config/bulletFData.txt"));
-    map.insert(std::make_pair("3retV", "config/3retVData.txt"));
-    map.insert(std::make_pair("3retF", "config/3retFData.txt"));
-    map.insert(std::make_pair("fieldV", "config/fieldVData.txt"));
-    map.insert(std::make_pair("fieldF", "config/fieldFData.txt"));
+    //std::unordered_map<std::string, std::string> map;
+    
+    std::vector<GLfloat> vertex = readDataFromFile("config/vData.txt");
+    std::vector<GLfloat> cockPitvertex = readDataFromFile("config/cockPitVData.txt");
+    std::vector<GLfloat> enemyvertex = readDataFromFile("onfig/enemyVData.txt");
+    std::vector<GLfloat> fire1vertex = readDataFromFile("config/fire1VData.txt");
+    std::vector<GLfloat> fire2vertex = readDataFromFile("config/fire2VData.txt");
+    std::vector<GLfloat> missileRightRightvertex = readDataFromFile("config/missileRightRightVData.txt");
+    std::vector<GLfloat> missileRightLeftvertex = readDataFromFile("config/missileRightLeftVData.txt");
+    std::vector<GLfloat> missileLeftLeftvertex = readDataFromFile("config/missileLeftLeftVData.txt");
+    std::vector<GLfloat> missileLeftRightvertex = readDataFromFile("missileLeftRightVData.txt");
+    std::vector<GLfloat> retvertex = readDataFromFile("config/retVData.txt");
+    std::vector<GLfloat> tailvertex = readDataFromFile("config/tailWingVData.txt");
+    std::vector<GLfloat> wingvertex = readDataFromFile("config/wingVData.txt");
+    std::vector<GLfloat> bulletvertex = readDataFromFile("config/bulletVData.txt");
+    std::vector<GLfloat> thirdretvertex = readDataFromFile("config/3retVData.txt");
+    std::vector<GLfloat> fieldvertex = readDataFromFile("config/fieldVData.txt");
+
+    GLuint vertexShader, fragmentShader;
+    vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
+    glCompileShader(vertexShader);
+
+    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
+    glCompileShader(fragmentShader);
+
+    shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+
+    //map.insert(std::make_pair("mainShipV", "config/vData.txt"));
+    //map.insert(std::make_pair("mainShipF", "config/fData.txt"));
+    //map.insert(std::make_pair("cockPitV", "config/cockPitVData.txt"));
+    //map.insert(std::make_pair("cockPitF", "config/cockPitFData.txt"));
+    //map.insert(std::make_pair("enemyV", "config/enemyVData.txt"));
+    //map.insert(std::make_pair("enemyF", "config/enemyFData.txt"));
+    //map.insert(std::make_pair("fire1V", "config/fire1VData.txt"));
+    //map.insert(std::make_pair("fire1F", "config/fire1FData.txt"));
+    //map.insert(std::make_pair("fire2V", "config/fire2VData.txt"));
+    //map.insert(std::make_pair("fire2F", "config/fire2FData.txt"));
+    //map.insert(std::make_pair("RRMissileV", "config/missileRightRightVData.txt"));
+    //map.insert(std::make_pair("RRMissileF", "config/missileRightRightFData.txt"));
+    //map.insert(std::make_pair("RLMissileV", "config/missileRightLeftVData.txt"));
+    //map.insert(std::make_pair("RLMissileF", "config/missileRightLeftFData.txt"));
+    //map.insert(std::make_pair("LLMissileV", "config/missileLeftLeftVData.txt"));
+    //map.insert(std::make_pair("LLMissileF", "config/missileLeftLeftFData.txt"));
+    //map.insert(std::make_pair("LRMissileV", "config/missileLeftRightVData.txt"));
+    //map.insert(std::make_pair("LRMissileF", "config/missileLeftRightFData.txt"));
+    //map.insert(std::make_pair("retV", "config/retVData.txt"));
+    //map.insert(std::make_pair("retF", "config/retFData.txt"));
+    //map.insert(std::make_pair("tailWingV", "config/tailWingVData.txt"));
+    //map.insert(std::make_pair("tailWingF", "config/tailWingFData.txt"));
+    //map.insert(std::make_pair("wingV", "config/wingVData.txt"));
+    //map.insert(std::make_pair("wingF", "config/wingFData.txt"));
+    //map.insert(std::make_pair("bulletV", "config/bulletVData.txt"));
+    //map.insert(std::make_pair("bulletF", "config/bulletFData.txt"));
+    //map.insert(std::make_pair("3retV", "config/3retVData.txt"));
+    //map.insert(std::make_pair("3retF", "config/3retFData.txt"));
+    //map.insert(std::make_pair("fieldV", "config/fieldVData.txt"));
+    //map.insert(std::make_pair("fieldF", "config/fieldFData.txt"));
 
     //for (const auto& m:n)
     //{

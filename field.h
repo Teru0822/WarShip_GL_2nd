@@ -2,6 +2,8 @@
 #include "GL/freeglut.h"
 #define ARRAY_MAX 10000000
 
+//namespace field 
+//{
 float Fieldvertex[ARRAY_MAX];
 int Fieldlines[ARRAY_MAX];
 int FieldvertexDataSize = 0, FieldlineDataSize = 0;
@@ -22,3 +24,4 @@ void makeField(float r, float g, float b)
     glEnd();
 
 }
+//}
